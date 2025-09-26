@@ -59,6 +59,12 @@ It is crucial to maintain consistent numbering; otherwise, the program may read 
 - **Functionality:**  
   - Measures error between projected images and target/reference images.  
   - Supports multiple metrics for evaluating reconstruction quality.
+ 
+### 8. `occupancy_network.py`
+- **Purpose:** Network Architecture.  
+ 
+### 9. `RaysamplingDataset.py`
+- **Purpose:** The same as content in paper.
 
 ---
 
@@ -71,6 +77,7 @@ It is crucial to maintain consistent numbering; otherwise, the program may read 
 python main.py
 
 **Note:** If the initial few losses do not decrease quickly, you may need to try running the code again; otherwise, the optimization may not converge. Running the code multiple times usually ensures convergence.
+
 By default, the input images will be resized to 100×100 (as handled by the `process_images` function in `train.py`).  
 At the same time, this number must match the number of ray samples (`n` in `RaySamplingDataset.py`'s `__init__(self, device, img_dir, angles, screens, n=100)`).  
 Keeping these two values the same ensures uniform spatial sampling; otherwise, an error will occur.
