@@ -20,13 +20,13 @@ It is crucial to maintain consistent numbering; otherwise, the program may read 
 
 ## Project Structure & Functionality
 
-### 1. `train/generate_angle_screen.py`
+### 1. `train.py/generate_angle_screen()`
 - **Purpose:** Controls whether the light field is optimized.  
 - **Functionality:**  
   - Users can set the initial light field directions.  
   - Determines which angles of the light field are used for optimization.
 
-### 2. `train/train_model_functions.py`
+### 2. `train_model_functions.py`
 - **Purpose:** Contains helper functions for training the neural network.  
 - **Key function:**
   - `truncate_ray`: Manually calculates and controls whether rays are truncated during training, affecting the accuracy and stability of the reconstruction.
@@ -68,5 +68,4 @@ It is crucial to maintain consistent numbering; otherwise, the program may read 
 2. Optionally configure `generate_angle_screen.py` to optimize the light field and set initial directions.  
 3. Adjust `truncate_ray` in `train_model_functions.py` if you want to truncate rays manually.  
 4. Run the pipeline:
-```bash
 python main.py
