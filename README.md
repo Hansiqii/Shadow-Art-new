@@ -1,4 +1,4 @@
-# Light Field Optimization & Neural Reconstruction Project
+# Neural Shadow Art
 
 ## Overview
 This project implements a pipeline for image processing, light field optimization, registration, and 3D mesh reconstruction using neural representations.  
