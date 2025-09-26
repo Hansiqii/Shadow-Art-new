@@ -69,3 +69,6 @@ It is crucial to maintain consistent numbering; otherwise, the program may read 
 3. Adjust `truncate_ray` in `train_model_functions.py` if you want to truncate rays manually.  
 4. Run the pipeline:
 python main.py
+
+**Note:** If the initial few losses do not decrease quickly, you may need to try running the code again; otherwise, the optimization may not converge. Running the code multiple times usually ensures convergence.
+
