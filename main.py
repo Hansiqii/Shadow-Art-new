@@ -56,9 +56,10 @@ loss, draw_loss, real_figure_loss = train(
     beta_1=0.001,
     beta_2=0.05,
     beta_3=1e-4,
-    beta_4=1e-5,
+    beta_4=1e-4,
     beta_5=0,
     beta_6=1e-4,
+    beta_eikonal=1e-4,
 )
 
 save_loss_plots(draw_loss, real_figure_loss)

@@ -37,7 +37,6 @@ def truncate_ray(ray):
     # Filter ray based on the conditions
     return ray[valid_indexes], valid_indexes
 
-
 def accumulated_occupancy(occupancy_values_on_ray):
     """Params:  occupancy_values_on_ray:    an array of occupancy values,
                                             it should be truncated in the bounding volume.
@@ -50,14 +49,13 @@ def accumulated_occupancy(occupancy_values_on_ray):
     else:
         return 1-cumprod_result[-1]
 
+
 def regularization_loss_term_1(occupancy_values_on_ray):
     """smooth
     Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
                                         and shape (n,). It should be truncated in the bounding volume.
     Returns:    One regularization loss term, the one for this ray."""
     return torch.mean((occupancy_values_on_ray[1:] - occupancy_values_on_ray[:-1])**2)
-
-
 
 def regularization_loss_term_2(occupancy_values_on_ray):
     """二值化

@@ -39,6 +39,7 @@ def train(
     beta_4,
     beta_5,
     beta_6,
+    beta_eikonal,
 ):
     """Trains the model' over multiple epochs using the train_loop' function.
 
@@ -98,9 +99,10 @@ def train(
             beta_1 * 2 ** min(epoch, 3),
             beta_2 * 2 ** min(epoch, 3),
             beta_3 * (1 if 3 < epoch else 0),
-            beta_4 * 15 ** (epoch),
+            beta_4 * 2 ** max(epoch-20, 0),
             beta_5 * 2 ** (epoch),
             beta_6 * (1 if epoch > 3 else 0),
+            beta_eikonal * 2 ** max(epoch-20, 0),
         )
 
         # 计算平均损失+打印日志
@@ -113,6 +115,7 @@ def train(
         avg_regular_loss_4 = sum(loss[5] for loss in epoch_losses) / len(epoch_losses)
         avg_regular_loss_5 = sum(loss[6] for loss in epoch_losses) / len(epoch_losses)
         avg_regular_loss_6 = sum(loss[7] for loss in epoch_losses) / len(epoch_losses)
+        avg_eikonal_loss = sum(loss[8] for loss in epoch_losses) / len(epoch_losses)
         draw_losses.append(
             (
                 avg_loss,
@@ -139,6 +142,8 @@ def train(
         print(
             f"End of epoch {epoch + 1}, average regular curvature loss: {avg_regular_loss_6:>7f}"
         )
+        print(f"End of epoch {epoch + 1}, average eikonal loss: {avg_eikonal_loss:>7f}")
+        
         output_dir = os.path.join(current_dir, "outcomes")
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
@@ -217,6 +222,7 @@ def train_loop(
     beta_4=0.1,
     beta_5=0.1,
     beta_6=0.1,
+    beta_eikonal=0.1,
 ):
     """Trains the model, which has to be a 3D to 1D occupancy network on a dataloader which has to provide
     rays of coordinates and corresponding occupancy values as items. The optimizer will be doing steps, loss is defined
@@ -333,7 +339,7 @@ def train_loop(
             + beta_5 * regularisation_loss_5
             + beta_6 * regularisation_loss_6
             + img_loss
-            + beta_4 * regularization_loss_term_eikonal_surface_aware
+            + beta_eikonal * regularization_loss_term_eikonal_surface_aware
         )
         # loss = img_loss
         losses.append(
