@@ -83,7 +83,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Load the trained model
 model = OccupancyNetwork()
-checkpoint = torch.load("/nas_data/data/wclw/ShadowArt_Occupency_Network/outcomes/outcome30.pth")
+checkpoint = torch.load("/home/hsq/CODE/2510_FinalDesign/init_code/ShadowArt/outcomes_05/outcome30.pth")
 model.load_state_dict(checkpoint["model.state_dict"])
 model.to(device)
 
@@ -94,7 +94,7 @@ vertices, triangles = extract_mesh(occupancy_values, grid)
 
 # 获取当前目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
-outcome_dir = os.path.join(current_dir, 'outcomes')
+outcome_dir = os.path.join(current_dir, 'outcomes_05')
 
 # 创建 outcomes 文件夹（如果不存在）
 if not os.path.exists(outcome_dir):

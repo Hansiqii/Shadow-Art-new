@@ -51,26 +51,32 @@ def accumulated_occupancy(occupancy_values_on_ray):
         return 1-cumprod_result[-1]
 
 def regularization_loss_term_1(occupancy_values_on_ray):
-    """Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
+    """smooth
+    Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
                                         and shape (n,). It should be truncated in the bounding volume.
     Returns:    One regularization loss term, the one for this ray."""
     return torch.mean((occupancy_values_on_ray[1:] - occupancy_values_on_ray[:-1])**2)
 
+
+
 def regularization_loss_term_2(occupancy_values_on_ray):
-    """Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
+    """二值化
+    Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
                                         and shape (n,). It should be truncated in the bounding volume.
     Returns:    One regularization loss term, the one for this ray."""
     return torch.mean(torch.min(occupancy_values_on_ray**2, (1-occupancy_values_on_ray)**2))
 
 def regularization_loss_term_3(occupancy_values_on_ray, volume, threshold, temperature):
-    """Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
+    """总体积
+    Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
                                         and shape (n,). It should be truncated in the bounding volume.
     Returns:    One regularization loss term, the one for this ray."""
     soft_indicators = torch.sigmoid((occupancy_values_on_ray - threshold) / temperature)
     return torch.sum(soft_indicators * volume)
 
 def regularization_loss_term_5(dataset, model, accumulated_occupancy_, img_idx, r, c):
-    """Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
+    """防止薄片
+    Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
                                         and shape (n,). It should be truncated in the bounding volume.
     Returns:    One regularization loss term, the one for this ray."""
     r_1 = min(dataset.height-1, r+1)
@@ -82,6 +88,7 @@ def regularization_loss_term_5(dataset, model, accumulated_occupancy_, img_idx, 
     return (f_1-accumulated_occupancy_)**2 + (f_2-accumulated_occupancy_)**2
 
 def regularization_loss_term_6(dataset, model, ray, img_idx, r, c, A):
+    '''梯度一致性正则化'''
     ray = ray.requires_grad_()
     output = model(ray)
     #input_grad = torch.autograd.grad(outputs=output, inputs=ray, grad_outputs=torch.ones_like(output), create_graph=True)[0]
@@ -123,6 +130,54 @@ def regularization_loss_term_6(dataset, model, ray, img_idx, r, c, A):
         return torch.tensor(0.0, device=loss.device)
     else:
         return loss
+
+def regularization_loss_term_eikonal_surface_aware(dataset, model, ray, threshold_ratio=0.4):
+    """
+    表面感知的 Eikonal 正则化
+    仅对接近表面的点（梯度较大的区域）施加约束
+    
+    Params:
+        dataset: 数据集对象
+        model: 神经网络模型
+        ray: torch.tensor with shape (n, 3)
+        threshold_ratio: 用于识别表面点的阈值比例
+    
+    Returns:
+        Eikonal loss (scalar tensor)
+    """
+    ray = ray.requires_grad_(True)
+    occupancy = model(ray)
+    
+    # 第一次前向传播：计算梯度识别表面点
+    gradients = torch.autograd.grad(
+        outputs=occupancy,
+        inputs=ray,
+        grad_outputs=torch.ones_like(occupancy),
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True
+    )[0]
+    
+    gradient_norms = torch.norm(gradients, p=2, dim=1)
+    
+    # 识别表面附近的点（类似于regularization_loss_term_6的逻辑）
+    # 这里使用与论文一致的阈值：θ * w
+    threshold = threshold_ratio * dataset.width / 2.0
+    surface_mask = gradient_norms > threshold
+    
+    if not surface_mask.any():
+        # 如果没有表面点，返回0损失
+        return torch.tensor(0.0, device=ray.device)
+    
+    # 仅对表面点计算 Eikonal loss
+    surface_gradient_norms = gradient_norms[surface_mask]
+    
+    # 目标范数（可以设为1.0或动态计算）
+    target_norm = 1.0
+    
+    eikonal_loss = torch.mean((surface_gradient_norms - target_norm) ** 2)
+    return eikonal_loss
+
 
 # def compute_orthogonal_vectors(normals):
 #     device = normals.device

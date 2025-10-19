@@ -12,7 +12,7 @@ from RaySamplingDataset import RaySamplingDataset
 
 
 def project_network2d_row(img_idx, row, width, model, dataset, reduce=torch.max):
-    """处理一行的像素坐标，使用 occupancy 网络进行批量计算."""
+    """处理第row行的像素坐标，使用 occupancy 网络进行批量计算."""
     device = next(model.parameters()).device
 
     # 生成该行所有列的 x 坐标（从 0 到 width 的比例坐标）
@@ -28,22 +28,31 @@ def project_network2d_row(img_idx, row, width, model, dataset, reduce=torch.max)
     # 获取光线 ray，对于每个像素位置 (r, c)
     indices = img_idx * dataset.width * dataset.height + dataset.width * r + c
     rays = torch.stack([dataset[idx][0] for idx in indices]).to(device)
-    real_occupancy = torch.stack([dataset[idx][1] for idx in indices]).to(device).unsqueeze(1)
+    real_occupancy = (
+        torch.stack([dataset[idx][1] for idx in indices]).to(device).unsqueeze(1)
+    )
 
     with torch.no_grad():
         occupancy_values_on_ray = model(rays)
         # estimate_occupancy = result = 1 - torch.prod(1 - occupancy_values_on_ray, dim=1)
-        cumprod_result = torch.cumprod(1-occupancy_values_on_ray, dim=0)
+        # 累乘法模拟光传播
+        cumprod_result = torch.cumprod(1 - occupancy_values_on_ray, dim=0)
         if cumprod_result.size(0) == 0:
             estimate_occupancy = 0
         else:
-            estimate_occupancy = 1-cumprod_result[-1]
+            estimate_occupancy = 1 - cumprod_result[-1]
         # print(real_occupancy)
         # print(real_occupancy.shape)
         # print(estimate_occupancy)
         # print(estimate_occupancy.shape)
-        estimate_occupancy = torch.cat([estimate_occupancy, torch.zeros(1, 1, device=estimate_occupancy.device)])
-        average_squared_difference = torch.mean((real_occupancy - estimate_occupancy) ** 2)
+        
+        # 计算预测与真值的均方误差
+        estimate_occupancy = torch.cat(
+            [estimate_occupancy, torch.zeros(1, 1, device=estimate_occupancy.device)]
+        )
+        average_squared_difference = torch.mean(
+            (real_occupancy - estimate_occupancy) ** 2
+        )
 
     # Reduce 光线值，计算该行的结果
     if occupancy_values_on_ray.shape[0] != 0:
@@ -56,15 +65,22 @@ def project_network2d_row(img_idx, row, width, model, dataset, reduce=torch.max)
 
 
 def painting(model, dataset, current_dir, epoch):
+    '''顶层绘图函数，把所有行都画出来、保存成图片'''
     print("Painting!")
+    # 定义黑底画布
     width, height = dataset.width, dataset.height
-    plot_grid = torch.zeros(size=(height, width), device=next(model.parameters()).device)
+    plot_grid = torch.zeros(
+        size=(height, width), device=next(model.parameters()).device
+    )
 
     total_difference = 0
+    # 遍历所有输入图像
     for img_idx in range(len(dataset.images_and_angles)):
         # 逐行计算 plot_grid
         for r in range(height):
-            plot_grid[r, :], difference = project_network2d_row(img_idx, r, width, model, dataset, torch.max)
+            plot_grid[r, :], difference = project_network2d_row(
+                img_idx, r, width, model, dataset, torch.max
+            )
             total_difference += difference
 
         # 将结果转换为 numpy 格式并进行二值化处理
@@ -78,16 +94,19 @@ def painting(model, dataset, current_dir, epoch):
         filtered_binary_image = ((1 - filtered_binary_image) * 255).astype(np.uint8)
 
         # 保存图像
-        output_dir = os.path.join(current_dir, 'outcomes')
+        output_dir = os.path.join(current_dir, "outcomes")
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         Image.fromarray(filtered_binary_image).save(
-            os.path.join(output_dir, f"outcome_Figure{img_idx}_Epoch{epoch + 1}.png"))
+            os.path.join(output_dir, f"outcome_Figure{img_idx}_Epoch{epoch + 1}.png")
+        )
         if epoch % 5 == 4 and epoch > 5:
-            output_dir = os.path.join(current_dir, 'data/temp')
+            output_dir = os.path.join(current_dir, "data/temp")
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
-            Image.fromarray(filtered_binary_image).save(os.path.join(current_dir, f"data/temp/outcome_{img_idx}.png"))
+            Image.fromarray(filtered_binary_image).save(
+                os.path.join(current_dir, f"data/temp/outcome_{img_idx}.png")
+            )
     print("Painting Finish!")
     real_figure_loss = total_difference / height / len(dataset.images_and_angles)
     return real_figure_loss.cpu().numpy()

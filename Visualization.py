@@ -2,6 +2,7 @@ from matplotlib import colors as mcolors  # 从matplotlib.colors导入
 import numpy as np
 import torch
 import pyvista as pv
+pv.OFF_SCREEN = True
 from occupancy_network import OccupancyNetwork
 import os
 
@@ -70,7 +71,8 @@ def visualize_occupancy_values(grid, occupancy_values, threshold=1e-1):
                      )
 
     plotter.set_background("white")
-    plotter.show()
+    plotter.show(screenshot="occupancy_output.png")
+    print("✅ 保存完成：occupancy_output.png")
 
 
 # Define grid size and range
@@ -86,7 +88,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Load the trained model
 model = OccupancyNetwork()
 checkpoint = torch.load(
-    "D:\\USTC_CC\\ShadowArt with Occupency Network\\ShadowArt_Occupency_Network\\outcomes\\outcome42.pth")
+    "/home/hsq/CODE/2510_FinalDesign/init_code/ShadowNet/outcomes/outcome30.pth")
 model.load_state_dict(checkpoint["model.state_dict"])
 model.to(device)
 
