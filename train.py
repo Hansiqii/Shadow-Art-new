@@ -102,7 +102,7 @@ def train(
             beta_4 * 2 ** max(epoch-20, 0),
             beta_5 * 2 ** (epoch),
             beta_6 * (1 if epoch > 3 else 0),
-            beta_eikonal * ((1 + 7 * min(epoch / 20, 1))),
+            beta_eikonal * (1 + 3 * max(0, min((10 - abs(epoch - 20)) / 10, 1))),
         )
 
         # 计算平均损失+打印日志
@@ -250,7 +250,27 @@ def train_loop(
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-
+    
+    # ========== 添加调试代码 ==========
+    model.eval()  # 临时切换到评估模式
+    with torch.no_grad():
+        # 测试100个随机点
+        test_points = torch.rand(100, 3).to(device) - 0.5
+        
+        # 直接调用模型（不管内部结构）
+        occupancy = model(test_points)
+        
+        print("\n" + "="*60)
+        print("Model Output Statistics:")
+        print(f"Occupancy: min={occupancy.min():.3f}, max={occupancy.max():.3f}, mean={occupancy.mean():.3f}")
+        print(f"Num near 0 (<0.1): {(occupancy < 0.1).sum()}")
+        print(f"Num near 1 (>0.9): {(occupancy > 0.9).sum()}")
+        print(f"Num in middle (0.1-0.9): {((occupancy >= 0.1) & (occupancy <= 0.9)).sum()}")
+        print("="*60 + "\n")
+    
+    model.train()  # 恢复训练模式
+    # ========== 调试代码结束 ==========
+    
     for batch, (rays, occupancy_values, volumes, img_idxs, rs, cs) in enumerate(
         dataloader
     ):
@@ -376,6 +396,7 @@ def train_loop(
             print("reg6:", regularisation_loss_6)
             print("reg7:", regularization_loss_term_eikonal_surface_aware)
     return losses
+
 
 
 def compute_integral(model, p, r, num_samples, f_p):
