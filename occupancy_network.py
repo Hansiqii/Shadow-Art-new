@@ -22,7 +22,7 @@ class OccupancyNetwork(nn.Module):
             3 + 3 * 2 * num_encoding_functions
         )  # 3 original dims + 2 (sin, cos) * 3 dims * num_encoding_functions
 
-        # Define fully connected layers 
+        # Define fully connected layers
         self.fc1 = nn.Linear(input_dim, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 256)

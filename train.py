@@ -103,6 +103,7 @@ def train(
             beta_5 * 2 ** (epoch),
             beta_6 * (1 if epoch > 3 else 0),
             beta_eikonal * (1 + 0.1 * max(epoch - 20, 0)),
+            # beta_eikonal * (1 + 0.1 * max(epoch - 20, 0)),
         )
 
         # 计算平均损失+打印日志

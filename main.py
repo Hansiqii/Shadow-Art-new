@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from occupancy_network import OccupancyNetwork
 import os
 import train_model_functions
+import time
 from network_checking import save_loss_plots
 
 model = OccupancyNetwork()
@@ -57,8 +58,8 @@ loss, draw_loss, real_figure_loss = train(
     beta_2=0.05,
     beta_3=1e-4,
     beta_4=1e-4,
-    beta_5=0,
-    beta_6=1e-4,
+    beta_5=1e-4,
+    beta_6=0,
     beta_eikonal=1e-4,
 )
 
