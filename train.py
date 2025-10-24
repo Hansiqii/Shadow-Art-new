@@ -443,6 +443,62 @@ def save_angles_to_txt(angles, folder_path="D:/your_path/", filename="A_angles.t
 def generate_angle_screen(model):
     '''生成本轮训练中使用的光照方向（angles）与屏幕法向（screens）向量'''
     
+    """
+    根据配置生成本轮训练使用的光照方向（angles）与屏幕法向（screens）。
+
+    支持：
+    - num_directions = 2 或 3
+    - train_base_directions: 基准向量是否参与训练
+    - enable_learnable_offsets: 是否叠加 delta_* / screen_* 偏移
+    - base_angles / base_screens: 初始向量列表
+    """
+    num_dirs = int(geometry_cfg.get("num_directions", 2))
+    if num_dirs not in (2, 3):
+        raise ValueError(f"Only 2 or 3 directions supported for now, got {num_dirs}.")
+
+    base_angles_cfg = geometry_cfg.get("base_angles")
+    base_screens_cfg = geometry_cfg.get("base_screens")
+    if base_angles_cfg is None:
+        base_angles_cfg = _default_base_vectors(num_dirs)
+    if base_screens_cfg is None:
+        base_screens_cfg = _default_base_vectors(num_dirs)
+
+    if len(base_angles_cfg) != num_dirs or len(base_screens_cfg) != num_dirs:
+        raise ValueError(
+            "Length of base_angles/base_screens must match geometry.num_directions."
+        )
+
+    train_base = bool(geometry_cfg.get("train_base_directions", False))
+    enable_offsets = bool(geometry_cfg.get("enable_learnable_offsets", True))
+
+    base_angles_tensor = _get_or_create_geometry_tensor(
+        model,
+        name="base_angles",
+        values=base_angles_cfg,
+        trainable=train_base,
+        device=device,
+    )
+    base_screens_tensor = _get_or_create_geometry_tensor(
+        model,
+        name="base_screens",
+        values=base_screens_cfg,
+        trainable=train_base,
+        device=device,
+    )
+
+    angles = base_angles_tensor
+    screens = base_screens_tensor
+
+    if enable_offsets:
+        offsets_angles, offsets_screens = _build_offsets(model, angles, screens)
+        angles = angles + offsets_angles
+        screens = screens + offsets_screens
+
+    angles = F.normalize(angles, dim=1)
+    screens = F.normalize(screens, dim=1)
+
+    return angles.detach().cpu(), screens.detach().cpu()
+
     # 原始版本
     # angles = torch.empty(2, 3)  # 创建一个空的张量，假设2个光照方向，每个方向三维向量
     # angles[0] = torch.tensor([1.0, 0.0, 0.0])  # 第一个行
@@ -475,6 +531,7 @@ def generate_angle_screen(model):
     # # screens[2, 1] = model.screen_y_3  # 第二个行，第二列
     # # screens[2, 2] = 1.0 # 第二个行，第三列
     # # screens[2] = torch.tensor([0.0, 0.0, 1.0])
+    # # return angles, screens
     
     
     # 两个方向版本，基准光照/屏幕方向参与优化
@@ -579,9 +636,7 @@ def generate_angle_screen(model):
     # return angles.detach().cpu(), screens.detach().cpu()
     
     
-    return angles, screens
-
-
+    
 def process_images(folder_path, size=(100, 100)):
     '''批量预处理数据集中所有输入图像，确保每张图都是统一大小的二值影子图'''
     # 遍历文件夹中的每张图片
@@ -611,3 +666,107 @@ def process_images(folder_path, size=(100, 100)):
 
         cv2.imwrite(img_path, resized_img)
         print(f"Processed and replaced: {img_path}")
+        
+        
+# 以下是generate_angle_screen辅助函数
+def _default_base_vectors(num_dirs: int):
+    defaults = [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+    return defaults[:num_dirs]
+
+
+def _get_or_create_geometry_tensor(
+    model: torch.nn.Module,
+    name: str,
+    values,
+    trainable: bool,
+    device: torch.device,
+):
+    tensor = torch.tensor(values, dtype=torch.float32, device=device)
+    if trainable:
+        param_name = f"{name}_param"
+        if not hasattr(model, param_name):
+            model.register_parameter(param_name, torch.nn.Parameter(tensor))
+        else:
+            param = getattr(model, param_name)
+            if param.shape != tensor.shape:
+                raise ValueError(
+                    f"Geometry parameter '{param_name}' shape changed during training. "
+                    "Please restart training or keep geometry shape consistent."
+                )
+        return getattr(model, param_name)
+    else:
+        buffer_name = f"{name}_buffer"
+        if not hasattr(model, buffer_name):
+            model.register_buffer(buffer_name, tensor)
+        else:
+            buffer = getattr(model, buffer_name)
+            if buffer.shape != tensor.shape:
+                raise ValueError(
+                    f"Geometry buffer '{buffer_name}' shape changed. "
+                    "Please restart training or keep geometry shape consistent."
+                )
+            buffer.data.copy_(tensor)
+        return getattr(model, buffer_name)
+
+
+def _build_offsets(model: torch.nn.Module, angles: torch.Tensor, screens: torch.Tensor):
+    offsets_angles = torch.zeros_like(angles)
+    offsets_screens = torch.zeros_like(screens)
+
+    if angles.size(0) >= 1:
+        if hasattr(model, "delta_y_1"):
+            offsets_angles[0, 1] = model.delta_y_1
+        if hasattr(model, "delta_z_1"):
+            offsets_angles[0, 2] = model.delta_z_1
+        if hasattr(model, "screen_y_1"):
+            offsets_screens[0, 1] = model.screen_y_1
+        if hasattr(model, "screen_z_1"):
+            offsets_screens[0, 2] = model.screen_z_1
+
+    if angles.size(0) >= 2:
+        if hasattr(model, "delta_x_2"):
+            offsets_angles[1, 0] = model.delta_x_2
+        if hasattr(model, "delta_y_2"):
+            offsets_angles[1, 1] = model.delta_y_2
+        if hasattr(model, "delta_z_2"):
+            offsets_angles[1, 2] = model.delta_z_2
+        if hasattr(model, "screen_x_2"):
+            offsets_screens[1, 0] = model.screen_x_2
+        if hasattr(model, "screen_y_2"):
+            offsets_screens[1, 1] = model.screen_y_2
+        if hasattr(model, "screen_z_2"):
+            offsets_screens[1, 2] = model.screen_z_2
+
+    if angles.size(0) >= 3:
+        if hasattr(model, "delta_x_3"):
+            offsets_angles[2, 0] = model.delta_x_3
+        if hasattr(model, "delta_y_3"):
+            offsets_angles[2, 1] = model.delta_y_3
+        if hasattr(model, "delta_z_3"):
+            offsets_angles[2, 2] = model.delta_z_3
+        if hasattr(model, "screen_x_3"):
+            offsets_screens[2, 0] = model.screen_x_3
+        if hasattr(model, "screen_y_3"):
+            offsets_screens[2, 1] = model.screen_y_3
+        if hasattr(model, "screen_z_3"):
+            offsets_screens[2, 2] = model.screen_z_3
+
+    return offsets_angles, offsets_screens
+
+
+def generate_angle_screen_legacy(model):
+    angles = torch.empty(2, 3)
+    angles[0] = torch.tensor([1.0, 0.0, 0.0])
+    angles[1] = torch.tensor([0.0, 1.0, 0.0])
+
+    screens = torch.empty(2, 3)
+    screens[0] = torch.tensor([1.0, 0.0, 0.0])
+    screens[1] = torch.tensor([0.0, 1.0, 0.0])
+    return angles, screens    
+    
+
+

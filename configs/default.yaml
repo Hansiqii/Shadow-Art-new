@@ -38,3 +38,17 @@ training:
     reg5: 1.0e-3
     reg6: 0.0
     eikonal: 0.0
+
+geometry:
+  num_directions: 3               # 改成 3 即可启用三个光源/屏幕
+  train_base_directions: true      # true 表示基准向量本身作为 nn.Parameter 参与训练
+  enable_learnable_offsets: false   # 是否叠加 delta_* / screen_* 偏移
+  # 原始方向
+  base_angles:
+    - [1.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0]
+    - [0.0, 0.0, 1.0]
+  base_screens:
+    - [1.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0]
+    - [0.0, 0.0, 1.0]
