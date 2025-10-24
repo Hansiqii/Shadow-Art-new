@@ -7,6 +7,7 @@ import numpy as np
 
 # Positional encoding function to increase the representational capacity of the input x
 def positional_encoding(x, num_encoding_functions=6):
+    '''位置编码函数，类似NeRF中的做法'''
     encoding = [x]
     for i in range(num_encoding_functions):
         for func in [torch.sin, torch.cos]:
@@ -22,7 +23,7 @@ class OccupancyNetwork(nn.Module):
             3 + 3 * 2 * num_encoding_functions
         )  # 3 original dims + 2 (sin, cos) * 3 dims * num_encoding_functions
 
-        # Define fully connected layers
+        # Define fully connected layers，8层mlp
         self.fc1 = nn.Linear(input_dim, 256)
         self.fc2 = nn.Linear(256, 256)
         self.fc3 = nn.Linear(256, 256)
@@ -32,7 +33,7 @@ class OccupancyNetwork(nn.Module):
         self.fc7 = nn.Linear(256, 256)
         self.fc8 = nn.Linear(256, 1)
 
-        # 定义可学习的角度/屏幕参数
+        # 定义可学习的角度/屏幕参数（为模型添加的额外可学习参数）
         self.delta_y_1 = nn.Parameter(
             torch.tensor([0.0], requires_grad=True)
         )  # 初始化为 0.3
@@ -74,7 +75,7 @@ class OccupancyNetwork(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-        # Initialize all fully connected layers' weights to zero
+        '''Initialize all fully connected layers' weights to zero'''
         for m in self.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
@@ -83,7 +84,9 @@ class OccupancyNetwork(nn.Module):
         nn.init.constant_(self.fc8.bias, 0.0)
 
     def forward(self, x):
+        # 位置编码
         x = positional_encoding(x, self.num_encoding_functions)
+        # 依次通过七层全连接层和ReLU激活函数
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = F.relu(self.fc3(x))
@@ -91,7 +94,7 @@ class OccupancyNetwork(nn.Module):
         x = F.relu(self.fc5(x))
         x = F.relu(self.fc6(x))
         x = F.relu(self.fc7(x))
-        x = torch.sigmoid(self.fc8(x))
+        x = torch.sigmoid(self.fc8(x))  # 即为输出的概率
         return x
 
     # def forward(self, x):
