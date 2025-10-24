@@ -81,7 +81,7 @@ def regularization_loss_term_3(occupancy_values_on_ray, volume, threshold, tempe
 
 
 def regularization_loss_term_5(dataset, model, accumulated_occupancy_, img_idx, r, c):
-    """
+    """防止薄片
     Params:  occupancy_values_on_ray  An array of occupancy values, torch.tensor with dtype torch.float32
                                         and shape (n,). It should be truncated in the bounding volume.
     Returns:    One regularization loss term, the one for this ray."""
