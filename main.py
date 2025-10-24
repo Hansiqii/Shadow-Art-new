@@ -12,6 +12,10 @@ from config_manager import create_optimizer, load_config
 
 
 def parse_args() -> argparse.Namespace:
+    '''
+        指定外部配置文件路径
+        eg. python main.py --config configs/shadow.yaml
+    '''
     parser = argparse.ArgumentParser(description="ShadowArt 训练入口")
     parser.add_argument(
         "--config",
@@ -22,7 +26,10 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 def main() -> None:
+    '''主函数'''
+    
     args = parse_args()
+    
     current_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = args.config
     if not os.path.isabs(config_path):
@@ -32,10 +39,12 @@ def main() -> None:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # 构建模型
     model_cfg = config.get("model", {})
     model = OccupancyNetwork(num_encoding_functions=model_cfg.get("num_encoding_functions", 6))
     model.to(device)
 
+    # 构建优化器
     optimizer = create_optimizer(model, config.get("optimizer", {}))
 
     torch.save(
@@ -46,6 +55,7 @@ def main() -> None:
         os.path.join(current_dir, "New.pth"),
     )
 
+    # 启动训练
     loss, draw_loss, real_figure_loss = train(
         current_dir=current_dir,
         device=device,
@@ -55,6 +65,7 @@ def main() -> None:
         config=config,
     )
 
+    # 保存损失图
     save_loss_plots(draw_loss, real_figure_loss)
 
 
