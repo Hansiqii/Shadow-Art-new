@@ -1,0 +1,40 @@
+experiment:
+  name: shadowart_default
+
+paths:
+  input_dir: data/input
+  figures_dir: data/Figures
+  outcomes_dir: outcomes
+  temp_dir: data/temp
+
+data:
+  process_image_size: [100, 100]
+  ray_samples_per_pixel: 100
+
+model:
+  num_encoding_functions: 6
+
+optimizer:
+  type: adam
+  lr: 1.0e-4
+  betas: [0.9, 0.999]
+  weight_decay: 0.0
+  eps: 1.0e-8
+
+training:
+  epochs: 30
+  max_batches_per_epoch: 300000
+  batch_size: 32
+  eikonal_threshold_ratio: 0.4
+  angle_log:
+    enable: true
+    angles_filename: A_angles.txt
+    screens_filename: A_screens.txt
+  betas:
+    reg1: 1.0e-5
+    reg2: 5.0e-2
+    reg3: 1.0e-4
+    reg4: 1.0e-4
+    reg5: 1.0e-3
+    reg6: 0.0
+    eikonal: 0.0
