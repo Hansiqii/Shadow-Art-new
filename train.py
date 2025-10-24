@@ -25,6 +25,7 @@ def train(
     """
     主训练循环，根据配置文件中的参数完成训练。
     """
+    # 读取配置与目录
     training_cfg = config.get("training", {})
     paths_cfg = config.get("paths", {})
     data_cfg = config.get("data", {})
@@ -36,11 +37,13 @@ def train(
 
     os.makedirs(outcomes_dir, exist_ok=True)
     os.makedirs(temp_dir, exist_ok=True)
-
+    
+    # 图像预处理
     image_size = tuple(data_cfg.get("process_image_size", [100, 100]))
     process_images(input_dir, size=image_size)
     process_images(figures_dir, size=image_size)
 
+    # 取配置参数
     epochs = training_cfg.get("epochs", 1)
     batches = training_cfg.get("max_batches_per_epoch", 0)
     batch_size = training_cfg.get("batch_size", 32)
@@ -79,7 +82,7 @@ def train(
                 folder_path=outcomes_dir,
                 filename=screens_filename,
             )
-
+        # 创建RaySamplingDataset
         dataset = RaySamplingDataset(device, figures_dir, angles, screens, n=ray_samples)
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
         ratio = dataset.area_correction(figures_dir)
@@ -158,7 +161,8 @@ def train(
             },
             checkpoint_path,
         )
-
+        
+        # 生成二维投影图像
         real_figure_loss = painting(model, dataset, current_dir, epoch)
         real_figure_losses.append(real_figure_loss)
 
@@ -169,6 +173,7 @@ def train(
                 outcomes_dir, f"outcome_Figure{img_idx}_Epoch{epoch + 1}.png"
             )
 
+            # 计算原图、目标图、输出图之间的差距
             compute_diff(
                 current_dir,
                 input_image_path,
@@ -186,6 +191,7 @@ def train(
                 2,
             )
 
+        # 每隔5个epoch进行一次registration
         if epoch % 5 == 4 and epoch > 5:
             print("registration!")
             for img_idx in range(len(dataset.images_and_angles)):
@@ -234,6 +240,8 @@ def train_loop(
     eikonal_threshold_ratio=0.4,
 ):
     """单 epoch 内的训练逻辑。"""
+    
+    # 生成一个 3D 邻域偏移矩阵 A (3×3×3 = 27 directions)，用于曲率或 Eikonal 正则采样邻域点（计算梯度平滑度）
     values = [-1 / dataset.width, 0, 1 / dataset.width]
     A = torch.tensor(list(itertools.product(values, repeat=3)), device=dataset.device)
     losses = []
@@ -244,6 +252,7 @@ def train_loop(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
+    # 调试print
     model.eval()
     with torch.no_grad():
         test_points = torch.rand(100, 3).to(device) - 0.5
@@ -264,6 +273,7 @@ def train_loop(
     for batch, (rays, occupancy_values, volumes, img_idxs, rs, cs) in enumerate(
         dataloader
     ):
+        
         if batches != 0 and batch >= batches:
             break
 
@@ -286,6 +296,7 @@ def train_loop(
         regularisation_loss_6 = 0
         regularization_loss_term_eikonal_surface_aware = 0
 
+        # 计算 Occupancy 与正则项
         for ray_id, ray in enumerate(rays):
             if ray.size(0) == 0:
                 continue
@@ -323,7 +334,12 @@ def train_loop(
             )
 
         regularisation_loss_4 = 0
-
+        # if batch % 100 == 0 and batch > 0:
+        #     regularisation_loss_4 = compute_total_integral(model, grid_tensor, 0.01, 100, threshold=1e-1)
+        #     regularisation_loss_4 = torch.tensor(regularisation_loss_4, dtype=torch.float32, requires_grad=True)
+        #     print(regularisation_loss_4)
+        
+        # 归一化
         regularisation_loss_1 /= batch_size
         regularisation_loss_2 /= batch_size
         regularisation_loss_3 /= batch_size
@@ -360,6 +376,11 @@ def train_loop(
         )
 
         loss.backward(retain_graph=True)
+        # print(model.delta_x.grad)
+        # print(model.delta_y.grad)
+        # dot = torchviz.make_dot(loss, params=dict(
+        #     list(model.named_parameters()) + [('delta_x', model.delta_x), ('delta_y', model.delta_y)]))
+        # dot.render("delta_x_computational_graph", format="png")  # 保存计算图为 PNG 文件
         optimizer.step()
 
         if batch % 10 == 0:
@@ -406,11 +427,13 @@ def compute_total_integral(model, grid, r, num_samples, threshold=0.1):
 
 
 def save_angles_to_txt(angles, folder_path="D:/your_path/", filename="A_angles.txt"):
+    '''把本轮训练生成的光源方向（或屏幕法向）参数，保存到一个 A_angles.txt文件中'''
+    # 如果文件夹不存在，创建该文件夹
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-
+    # 构建完整的文件路径
     file_path = os.path.join(folder_path, filename)
-
+    # 写入文件
     with open(file_path, "a", encoding="utf-8") as f:
         for angle in angles:
             angle_str = " ".join(str(component.item()) for component in angle.flatten())
@@ -418,18 +441,152 @@ def save_angles_to_txt(angles, folder_path="D:/your_path/", filename="A_angles.t
 
 
 def generate_angle_screen(model):
-    angles = torch.empty(2, 3)
-    angles[0] = torch.tensor([1.0, 0.0, 0.0])
-    angles[1] = torch.tensor([0.0, 1.0, 0.0])
+    '''生成本轮训练中使用的光照方向（angles）与屏幕法向（screens）向量'''
+    
+    # 原始版本
+    # angles = torch.empty(2, 3)  # 创建一个空的张量，假设2个光照方向，每个方向三维向量
+    # angles[0] = torch.tensor([1.0, 0.0, 0.0])  # 第一个行
+    # # angles[0, 0] = 1.0  # 第一个行，第一列
+    # # angles[0, 1] = model.delta_y_1  # 第一个行，第二列
+    # # angles[0, 2] = model.delta_z_1  # 第一个行，第三列
+    
+    # angles[1] = torch.tensor([0.0, 1.0, 0.0])
+    # # angles[1, 0] = 1.0 + model.delta_x_2  # 第二个行，第一列
+    # # angles[1, 1] = 1.0  # 第二个行，第二列
+    # # angles[1, 2] = 0.0  # 第二个行，第三列
+    
+    # # angles[2, 0] = model.delta_x_3  # 第二个行，第一列
+    # # angles[2, 1] = model.delta_y_3  # 第二个行，第二列
+    # # angles[2, 2] = 1.0 # 第二个行，第三列
+    
+    # # angles[2] = torch.tensor([0.0, 0.0, 1.0])
+    
+    # screens = torch.empty(2, 3)  # 创建一个空的张量
+    # screens[0] = torch.tensor([1.0, 0.0, 0.0])  # 第一个行
+    # # screens[0, 0] = 1.0  # 第一个行，第一列
+    # # screens[0, 1] = model.screen_y_1  # 第一个行，第二列
+    # # screens[0, 2] = model.screen_z_1  # 第一个行，第三列
 
-    screens = torch.empty(2, 3)
-    screens[0] = torch.tensor([1.0, 0.0, 0.0])
-    screens[1] = torch.tensor([0.0, 1.0, 0.0])
+    # screens[1] = torch.tensor([0.0, 1.0, 0.0])
+    # # screens[1, 0] = model.screen_x_2  # 第二个行，第一列
+    # # screens[1, 1] = 1.0  # 第二个行，第二列
+    # # screens[1, 2] = model.screen_z_2  # 第二个行，第三列
+    # # screens[2, 0] = model.screen_x_3  # 第二个行，第一列
+    # # screens[2, 1] = model.screen_y_3  # 第二个行，第二列
+    # # screens[2, 2] = 1.0 # 第二个行，第三列
+    # # screens[2] = torch.tensor([0.0, 0.0, 1.0])
+    
+    
+    # 两个方向版本，基准光照/屏幕方向参与优化
+    # 1) 初始化（只在第一次调用时注册为 nn.Parameter）
+    # if not hasattr(model, "base_angles_param"):
+    #     base_angles = torch.tensor(
+    #         [[1.0, 0.0, 0.0],
+    #          [0.0, 1.0, 0.0]],
+    #         dtype=torch.float32,
+    #         device=device,
+    #     )
+    #     model.register_parameter("base_angles_param", torch.nn.Parameter(base_angles))
+
+    # if not hasattr(model, "base_screens_param"):
+    #     base_screens = torch.tensor(
+    #         [[1.0, 0.0, 0.0],
+    #          [0.0, 1.0, 0.0]],
+    #         dtype=torch.float32,
+    #         device=device,
+    #     )
+    #     model.register_parameter("base_screens_param", torch.nn.Parameter(base_screens))
+
+    # # 2) 叠加已有 delta 偏移
+    # offsets_angles = torch.zeros_like(model.base_angles_param)
+    # offsets_screens = torch.zeros_like(model.base_screens_param)
+
+    # if hasattr(model, "delta_y_1"):
+    #     offsets_angles[0, 1] = model.delta_y_1
+    # if hasattr(model, "delta_z_1"):
+    #     offsets_angles[0, 2] = model.delta_z_1
+    # if hasattr(model, "delta_x_2"):
+    #     offsets_angles[1, 0] = model.delta_x_2
+
+    # if hasattr(model, "screen_y_1"):
+    #     offsets_screens[0, 1] = model.screen_y_1
+    # if hasattr(model, "screen_z_1"):
+    #     offsets_screens[0, 2] = model.screen_z_1
+    # if hasattr(model, "screen_x_2"):
+    #     offsets_screens[1, 0] = model.screen_x_2
+    # if hasattr(model, "screen_z_2"):
+    #     offsets_screens[1, 2] = model.screen_z_2
+
+    # angles = F.normalize(model.base_angles_param + offsets_angles, dim=1)
+    # screens = F.normalize(model.base_screens_param + offsets_screens, dim=1)
+
+    # return angles.detach().cpu(), screens.detach().cpu()
+    
+    
+    # """三个方向版本：在上述基础上增加第三组向量。"""
+    # if not hasattr(model, "base_angles_param"):
+    #     base_angles = torch.tensor(
+    #         [[1.0, 0.0, 0.0],
+    #          [0.0, 1.0, 0.0],
+    #          [0.0, 0.0, 1.0]],
+    #         dtype=torch.float32,
+    #         device=device,
+    #     )
+    #     model.register_parameter("base_angles_param", torch.nn.Parameter(base_angles))
+
+    # if not hasattr(model, "base_screens_param"):
+    #     base_screens = torch.tensor(
+    #         [[1.0, 0.0, 0.0],
+    #          [0.0, 1.0, 0.0],
+    #          [0.0, 0.0, 1.0]],
+    #         dtype=torch.float32,
+    #         device=device,
+    #     )
+    #     model.register_parameter("base_screens_param", torch.nn.Parameter(base_screens))
+
+    # offsets_angles = torch.zeros_like(model.base_angles_param)
+    # offsets_screens = torch.zeros_like(model.base_screens_param)
+
+    # if hasattr(model, "delta_y_1"):
+    #     offsets_angles[0, 1] = model.delta_y_1
+    # if hasattr(model, "delta_z_1"):
+    #     offsets_angles[0, 2] = model.delta_z_1
+    # if hasattr(model, "delta_x_2"):
+    #     offsets_angles[1, 0] = model.delta_x_2
+    # if hasattr(model, "delta_z_2"):
+    #     offsets_angles[1, 2] = model.delta_z_2
+    # if hasattr(model, "delta_x_3"):
+    #     offsets_angles[2, 0] = model.delta_x_3
+    # if hasattr(model, "delta_y_3"):
+    #     offsets_angles[2, 1] = model.delta_y_3
+
+    # if hasattr(model, "screen_y_1"):
+    #     offsets_screens[0, 1] = model.screen_y_1
+    # if hasattr(model, "screen_z_1"):
+    #     offsets_screens[0, 2] = model.screen_z_1
+    # if hasattr(model, "screen_x_2"):
+    #     offsets_screens[1, 0] = model.screen_x_2
+    # if hasattr(model, "screen_z_2"):
+    #     offsets_screens[1, 2] = model.screen_z_2
+    # if hasattr(model, "screen_x_3"):
+    #     offsets_screens[2, 0] = model.screen_x_3
+    # if hasattr(model, "screen_y_3"):
+    #     offsets_screens[2, 1] = model.screen_y_3
+
+    # angles = F.normalize(model.base_angles_param + offsets_angles, dim=1)
+    # screens = F.normalize(model.base_screens_param + offsets_screens, dim=1)
+
+    # return angles.detach().cpu(), screens.detach().cpu()
+    
+    
     return angles, screens
 
 
 def process_images(folder_path, size=(100, 100)):
+    '''批量预处理数据集中所有输入图像，确保每张图都是统一大小的二值影子图'''
+    # 遍历文件夹中的每张图片
     if not os.path.isdir(folder_path):
+        # 构建完整路径
         print(f"Warning: directory {folder_path} does not exist, skip processing.")
         return
 
