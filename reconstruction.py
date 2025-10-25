@@ -1,9 +1,10 @@
 import numpy as np
 import torch
 import mcubes
-from occupancy_network import OccupancyNetwork
 import os
-
+from config_manager import load_config
+from train import generate_angle_screen
+from occupancy_network import OccupancyNetwork
 
 # Step 1: Define the grid of points in 3D space
 def create_grid(N, xmin, xmax, ymin, ymax, zmin, zmax):
@@ -104,12 +105,34 @@ zmin, zmax = -0.5, 0.5
 grid = create_grid(N, xmin, xmax, ymin, ymax, zmin, zmax)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+config = load_config("/home/hsq/CODE/2510_FinalDesign/init_code/ShadowArt/configs/default.yaml")  # 根据实际路径修改
+geometry_cfg = config.get("geometry", {})
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # Load the trained model
-model = OccupancyNetwork()
-checkpoint = torch.load(
-    "/home/hsq/CODE/2510_FinalDesign/init_code/ShadowArt/outcomes/outcome30.pth"
-)
-model.load_state_dict(checkpoint["model.state_dict"])
+# model = OccupancyNetwork()
+model = OccupancyNetwork(num_encoding_functions=6).to(device)
+
+generate_angle_screen(model, geometry_cfg, device)
+
+checkpoint = torch.load("/home/hsq/CODE/2510_FinalDesign/init_code/ShadowArt/runs/20251025_132215/gpu3/outcomes/outcome30.pth", map_location=device)
+
+state_dict = checkpoint["model.state_dict"]
+
+for name in ("base_angles_param", "base_screens_param"):
+    if name in state_dict and not hasattr(model, name):
+        param_tensor = state_dict[name]
+        model.register_parameter(
+            name,
+            torch.nn.Parameter(torch.zeros_like(param_tensor), requires_grad=True),
+        )
+
+model.load_state_dict(state_dict, strict=True)
+
+# checkpoint = torch.load(
+#     "/home/hsq/CODE/2510_FinalDesign/init_code/ShadowArt/runs/20251025_011950/gpu0/outcomes/outcome30.pth"
+# )
+# model.load_state_dict(checkpoint["model.state_dict"])
 model.to(device)
 
 occupancy_values = evaluate_occupancy_network(model, grid, device)
@@ -126,5 +149,5 @@ if not os.path.exists(outcome_dir):
     os.makedirs(outcome_dir)
 
 # 保存的临时 mesh 文件名
-temp_mesh_filename = os.path.join(outcome_dir, "A_temp_output_mesh.obj")
+temp_mesh_filename = os.path.join(outcome_dir, "A_temp_output_mesh_eki2.obj")
 save_mesh_as_obj(vertices, triangles, temp_mesh_filename)

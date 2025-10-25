@@ -1,0 +1,54 @@
+experiment:
+  name: shadowart_default
+
+paths:
+  input_dir: data/input
+  figures_dir: data/Figures
+  outcomes_dir: outcomes
+  temp_dir: data/temp
+
+data:
+  process_image_size: [100, 100]
+  ray_samples_per_pixel: 100
+
+model:
+  num_encoding_functions: 6
+
+optimizer:
+  type: adam
+  lr: 1.0e-4
+  betas: [0.9, 0.999]
+  weight_decay: 0.0
+  eps: 1.0e-8
+
+training:
+  epochs: 30
+  max_batches_per_epoch: 300000
+  batch_size: 32
+  eikonal_threshold_ratio: 0.4
+  angle_log:
+    enable: true
+    angles_filename: A_angles.txt
+    screens_filename: A_screens.txt
+  betas:
+    reg1: 1.0e-4
+    reg2: 5.0e-2
+    reg3: 1.0e-4
+    reg4: 0
+    reg5: 1.0e-3
+    reg6: 0.0
+    eikonal: 1.0e-4
+
+geometry:
+  num_directions: 2               # 改成 3 即可启用三个光源/屏幕
+  train_base_directions: true      # true 表示基准向量本身作为 nn.Parameter 参与训练
+  enable_learnable_offsets: false   # 是否叠加 delta_* / screen_* 偏移
+  # 原始方向
+  base_angles:
+    - [1.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0]
+    # - [0.0, 0.0, 1.0]
+  base_screens:
+    - [1.0, 0.0, 0.0]
+    - [0.0, 1.0, 0.0]
+    # - [0.0, 0.0, 1.0]
